@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>18. The Invisible Man - 3D Sci-Fi RPG</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js for 3D graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;600;700&display=swap');
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Rajdhani', sans-serif;
+            background-color: #030712;
+            color: #e5e7eb;
+            user-select: none;
+        }
+
+        h1, h2, h3, h4, .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #0ea5e9;
+            border-radius: 3px;
+        }
+
+        /* Glow effects */
+        .cyan-glow {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+        }
+        .red-glow {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+        }
+        .text-glow-cyan {
+            text-shadow: 0 0 8px rgba(6, 182, 212, 0.7);
+        }
+        .text-glow-red {
+            text-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
+        }
+
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 12px;
+            height: 12px;
+            pointer-events: none;
+            z-index: 20;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(6, 182, 212, 0.8);
+        }
+        #crosshair::before { top: 5px; left: 0; width: 12px; height: 2px; }
+        #crosshair::after { top: 0; left: 5px; width: 2px; height: 12px; }
+
+        /* Thermal Vision Filter Screen Effect */
+        .thermal-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.05) 0%, rgba(6, 182, 212, 0.15) 100%);
+            border: 2px solid rgba(6, 182, 212, 0.3);
+            z-index: 5;
+            display: none;
+        }
+
+        /* Radar Minimap */
+        #minimap-container {
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: 2px solid #0ea5e9;
+            background: rgba(15, 23, 42, 0.85);
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 0 10px rgba(14, 165, 233, 0.3);
+        }
+        #minimap-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Tooltip */
+        #item-tooltip {
+            position: absolute;
+            pointer-events: none;
+            display: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-slate-100 antialiased select-none overflow-hidden">
+
+    <!-- 3D Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Crosshair & Thermal Vision FX -->
+    <div id="crosshair"></div>
+    <div id="thermal-overlay" class="thermal-overlay"></div>
+
+    <!-- HUD OVERLAY -->
+    <div id="hud" class="absolute inset-0 pointer-events-none z-10 flex flex-col justify-between p-4 md:p-6">
+        
+        <!-- Top HUD Header -->
+        <div class="flex justify-between items-start w-full">
+            <!-- Player Stats Header -->
+            <div class="pointer-events-auto bg-slate-900/80 backdrop-blur-md border border-cyan-500/30 p-3 rounded-xl w-72 cyan-glow">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="font-bold text-cyan-400 text-lg tracking-wider" id="hud-player-name">BLAKEMORT</span>
+                    <span class="bg-cyan-950 text-cyan-300 text-xs px-2 py-0.5 rounded border border-cyan-500/40 font-mono" id="hud-player-level">LVL 1</span>
+                </div>
+                <div class="text-xs text-slate-400 mb-2 flex justify-between">
+                    <span>CLASS: SCI GUARDIAN</span>
+                    <span id="hud-player-class">EXPERT</span>
+                </div>
+
+                <!-- Health Bar -->
+                <div class="mb-1.5">
+                    <div class="flex justify-between text-xs font-semibold mb-0.5">
+                        <span class="text-red-400"><i class="fa-solid fa-heart mr-1"></i>HP</span>
+                        <span id="hud-hp-text" class="text-slate-300">100 / 100</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden border border-red-900/50">
+                        <div id="hud-hp-bar" class="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-300" style="width: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- Mana / Serum Bar -->
+                <div class="mb-1.5">
+                    <div class="flex justify-between text-xs font-semibold mb-0.5">
+                        <span class="text-cyan-400"><i class="fa-solid fa-flask mr-1"></i>SERUM / MP</span>
+                        <span id="hud-mp-text" class="text-slate-300">50 / 50</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden border border-cyan-900/50">
+                        <div id="hud-mp-bar" class="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 transition-all duration-300" style="width: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- EXP Bar -->
+                <div>
+                    <div class="flex justify-between text-xs font-semibold mb-0.5">
+                        <span class="text-amber-400"><i class="fa-solid fa-star mr-1"></i>EXP</span>
+                        <span id="hud-exp-text" class="text-slate-300">0 / 100</span>
+                    </div>
+                    <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden border border-amber-900/50">
+                        <div id="hud-exp-bar" class="h-full bg-amber-400 transition-all duration-300" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Title & Game Objectives HUD Center -->
+            <div class="hidden md:flex flex-col items-center">
+                <h1 class="text-xl md:text-2xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-200 to-indigo-400 text-glow-cyan uppercase">
+                    18. The Invisible Man
+                </h1>
+                <p class="text-xs text-slate-400 font-mono tracking-wide mt-0.5">
+                    March 8 2017 | Chapter 10 | By Eric Mandaluyong Ericson
+                </p>
+                <!-- Active Skill Indicator -->
+                <div id="thermal-status" class="mt-2 text-xs bg-slate-900/80 px-3 py-1 rounded-full border border-cyan-500/30 text-cyan-400 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                    <span>THERMAL VISION: OFF (Press '1' or Click Skill)</span>
+                </div>
+            </div>
+
+            <!-- Radar / Mini-map -->
+            <div class="pointer-events-auto flex flex-col items-end gap-2">
+                <div idminimap-wrapper class="relative">
+                    <div id="minimap-container">
+                        <canvas id="minimap-canvas" width="160" height="160"></canvas>
+                        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div class="w-1.5 h-1.5 bg-cyan-400 rounded-full border border-white"></div>
+                        </div>
+                    </div>
+                    <span class="text-[10px] text-cyan-400/80 font-mono block text-center mt-1">RADAR SCOPE</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle Objective Tracker & Notifications -->
+        <div class="flex justify-between items-end w-full my-auto pointer-events-none">
+            <!-- Quest Tracker (Left) -->
+            <div class="pointer-events-auto bg-slate-900/85 border border-amber-500/30 p-3 rounded-xl w-72 max-h-48 overflow-y-auto">
+                <div class="flex items-center gap-2 text-amber-400 font-bold text-sm mb-1 border-b border-amber-500/20 pb-1">
+                    <i class="fa-solid fa-scroll"></i> ACTIVE QUEST LOG
+                </div>
+                <div id="hud-quest-title" class="text-xs font-bold text-cyan-300">Investigate the Facility</div>
+                <p id="hud-quest-desc" class="text-xs text-slate-300 mt-1">Talk to Senior Researcher Dr. Aris near the central console.</p>
+                <div class="mt-2 text-[11px] text-slate-400 border-t border-slate-800 pt-1">
+                    Progress: <span id="hud-quest-progress" class="text-amber-300">0 / 1</span>
+                </div>
+            </div>
+
+            <!-- In-game Notification Banner Center -->
+            <div id="notification-toast" class="hidden pointer-events-auto bg-gradient-to-r from-cyan-900/90 to-slate-900/90 border border-cyan-400 text-cyan-100 px-6 py-3 rounded-xl shadow-2xl text-center max-w-md transition-all duration-500">
+                <i class="fa-solid fa-circle-info text-cyan-400 mr-2" id="toast-icon"></i>
+                <span id="toast-message" class="text-sm font-semibold">Quest Updated!</span>
+            </div>
+
+            <!-- Boss Health Bar Container (Dynamic) -->
+            <div id="boss-hud" class="hidden w-80 bg-slate-900/90 border border-red-500/50 p-3 rounded-xl red-glow">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-xs font-black text-red-500 tracking-wider">BOSS: INVISIBLE DILEMMA</span>
+                    <span id="boss-hp-text" class="text-xs text-slate-300 font-mono">1000/1000</span>
+                </div>
+                <div class="w-full h-3 bg-slate-950 rounded-full border border-red-800/80 overflow-hidden">
+                    <div id="boss-hp-bar" class="h-full bg-gradient-to-r from-red-600 via-rose-500 to-amber-500 transition-all duration-200" style="width: 100%;"></div>
+                </div>
+                <div class="text-[10px] text-red-400/80 mt-1 text-center italic">Warning: Invisibility Exposure Serum Active!</div>
+            </div>
+        </div>
+
+        <!-- Bottom Action HUD & Controls Nav -->
+        <div class="flex flex-col md:flex-row justify-between items-end gap-3 w-full">
+            <!-- Navigation Menu Buttons -->
+            <div class="pointer-events-auto flex gap-2">
+                <button onclick="toggleWindow('menu-modal')" class="bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-slate-200 px-3 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow">
+                    <i class="fa-solid fa-book-open text-cyan-400"></i> Story & Moral
+                </button>
+                <button onclick="toggleWindow('inventory-modal')" class="bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-slate-200 px-3 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow">
+                    <i class="fa-solid fa-briefcase text-amber-400"></i> Inventory (I)
+                </button>
+                <button onclick="toggleWindow('skilltree-modal')" class="bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-slate-200 px-3 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow">
+                    <i class="fa-solid fa-sitemap text-indigo-400"></i> Skill Tree (K)
+                </button>
+                <button id="btn-camera-toggle" class="bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-slate-200 px-3 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow">
+                    <i class="fa-solid fa-video text-emerald-400"></i> View (V): <span id="camera-mode-text" class="text-emerald-400">3rd Person</span>
+                </button>
+            </div>
+
+            <!-- Action Hotbar -->
+            <div class="pointer-events-auto flex items-center gap-2 bg-slate-900/80 p-2 rounded-xl border border-slate-700/80">
+                <!-- Skill 1: Thermal Vision -->
+                <button id="skill-1-btn" onclick="useSkill(1)" class="relative w-12 h-12 bg-slate-800 border-2 border-cyan-500 hover:border-cyan-300 rounded-lg flex flex-col items-center justify-center transition group">
+                    <i class="fa-solid fa-eye text-cyan-400 text-lg group-hover:scale-110 transition"></i>
+                    <span class="text-[9px] font-bold text-slate-300 mt-0.5">1: SCAN</span>
+                    <span class="absolute -top-1 -right-1 bg-cyan-600 text-[9px] px-1 rounded text-white font-mono">10 MP</span>
+                </button>
+
+                <!-- Skill 2: Plasma Strike / Attack -->
+                <button id="skill-2-btn" onclick="useSkill(2)" class="relative w-12 h-12 bg-slate-800 border-2 border-red-500 hover:border-red-300 rounded-lg flex flex-col items-center justify-center transition group">
+                    <i class="fa-solid fa-hand-fist text-red-400 text-lg group-hover:scale-110 transition"></i>
+                    <span class="text-[9px] font-bold text-slate-300 mt-0.5">2: ATTACK</span>
+                    <span class="absolute -top-1 -right-1 bg-slate-700 text-[9px] px-1 rounded text-white font-mono">L-CLK</span>
+                </button>
+
+                <!-- Skill 3: Anti-Serum Barrier -->
+                <button id="skill-3-btn" onclick="useSkill(3)" class="relative w-12 h-12 bg-slate-800 border-2 border-indigo-500 hover:border-indigo-300 rounded-lg flex flex-col items-center justify-center transition group">
+                    <i class="fa-solid fa-shield-halved text-indigo-400 text-lg group-hover:scale-110 transition"></i>
+                    <span class="text-[9px] font-bold text-slate-300 mt-0.5">3: SHIELD</span>
+                    <span class="absolute -top-1 -right-1 bg-indigo-600 text-[9px] px-1 rounded text-white font-mono">20 MP</span>
+                </button>
+
+                <!-- Skill 4: Heal Serum Injector -->
+                <button id="skill-4-btn" onclick="useSkill(4)" class="relative w-12 h-12 bg-slate-800 border-2 border-emerald-500 hover:border-emerald-300 rounded-lg flex flex-col items-center justify-center transition group">
+                    <i class="fa-solid fa-syringe text-emerald-400 text-lg group-hover:scale-110 transition"></i>
+                    <span class="text-[9px] font-bold text-slate-300 mt-0.5">4: HEAL</span>
+                    <span class="absolute -top-1 -right-1 bg-emerald-600 text-[9px] px-1 rounded text-white font-mono">15 MP</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STORY & MORAL LESSON MODAL -->
+    <div id="menu-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-cyan-500/40 w-full max-w-2xl rounded-2xl p-6 shadow-2xl relative overflow-hidden text-slate-200">
+            <button onclick="toggleWindow('menu-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="border-b border-slate-800 pb-3 mb-4">
+                <span class="text-xs text-cyan-400 font-mono tracking-widest uppercase">Official Lore Archives • March 8 2017</span>
+                <h2 class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400">
+                    Chapter 10: The Invisible Man
+                </h2>
+                <p class="text-xs text-slate-400">Author: <strong class="text-slate-200">Eric Mandaluyong Ericson</strong></p>
+            </div>
+
+            <div class="space-y-3 text-sm text-slate-300 leading-relaxed max-h-80 overflow-y-auto pr-2">
+                <p>
+                    Once upon a time in a far eastern science program, there lived a scientist named <span class="text-red-400 font-semibold">Dilemma</span> who desired to become an invisible man. While his colleague <span class="text-cyan-400 font-semibold">Blakemort</span> sought only to avoid destruction and preserve order, Dilemma wanted invisibility to scare people.
+                </p>
+                <p>
+                    Dilemma began the dangerous procedure by stabbing his left arm with a localized invisibility serum. As the chemical spread rapidly through his circulatory system, he became completely invisible to the naked human eye. Driven by chaos, Dilemma began terrorizing citizens.
+                </p>
+                <p>
+                    When Blakemort discovered Dilemma's horrifying actions, he immediately attempted to intervene:
+                    <em class="block my-2 border-l-2 border-cyan-500 pl-3 italic text-cyan-200">
+                        "Please stop it Dilemma! If you scare people while invisible, 50% survive while 50% commit suicide or die from extreme terror!"
+                    </em>
+                </p>
+                <p>
+                    Refusing to listen, Dilemma embraced his role as a murderer. To prevent further catastrophe, Blakemort was forced to neutralize Dilemma due to the overexposure and untamed lethality of the serum.
+                </p>
+                
+                <!-- MORAL LESSON BOX -->
+                <div class="bg-amber-950/40 border-l-4 border-amber-500 p-4 rounded-r-xl mt-4">
+                    <h4 class="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Moral Lesson</h4>
+                    <p class="text-amber-200 font-medium italic">
+                        "Don't pretend to be invisible most of the times. 50% of them get scared and die because of too much exposure and without following instruction/direction, so its cost is death."
+                    </p>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end">
+                <button onclick="toggleWindow('menu-modal')" class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-6 py-2 rounded-xl text-sm transition">
+                    Return to Mission
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- INVENTORY & EQUIPMENT MODAL -->
+    <div id="inventory-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-amber-500/40 w-full max-w-3xl rounded-2xl p-6 shadow-2xl relative text-slate-200">
+            <button onclick="toggleWindow('inventory-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <h2 class="text-xl font-bold text-amber-400 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-boxes-stacked"></i> Equipment & Inventory System
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Equipped Equipment -->
+                <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Currently Equipped</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-3 p-2 bg-slate-900 rounded-lg border border-slate-800">
+                            <div class="w-10 h-10 bg-cyan-950 border border-cyan-500/50 rounded flex items-center justify-center text-cyan-400 text-lg">
+                                <i class="fa-solid fa-crosshairs"></i>
+                            </div>
+                            <div>
+                                <div class="text-xs font-bold text-slate-200" id="eq-weapon-name">Plasma Stun Blade</div>
+                                <div class="text-[10px] text-slate-400">Atk +15 | Sci-Tech</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3 p-2 bg-slate-900 rounded-lg border border-slate-800">
+                            <div class="w-10 h-10 bg-indigo-950 border border-indigo-500/50 rounded flex items-center justify-center text-indigo-400 text-lg">
+                                <i class="fa-solid fa-user-shield"></i>
+                            </div>
+                            <div>
+                                <div class="text-xs font-bold text-slate-200" id="eq-armor-name">Guardian Tech Vest</div>
+                                <div class="text-[10px] text-slate-400">Def +10 | Resistance +10%</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3 p-2 bg-slate-900 rounded-lg border border-slate-800">
+                            <div class="w-10 h-10 bg-emerald-950 border border-emerald-500/50 rounded flex items-center justify-center text-emerald-400 text-lg">
+                                <i class="fa-solid fa-glasses"></i>
+                            </div>
+                            <div>
+                                <div class="text-xs font-bold text-slate-200" id="eq-goggles-name">Thermal Scanner V1</div>
+                                <div class="text-[10px] text-slate-400">Detect Invisible Mutants</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Backpack Grid -->
+                <div class="md:col-span-2 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Backpack Items</h3>
+                    <div id="inventory-grid" class="grid grid-cols-4 gap-3">
+                        <!-- Dynamic items populated by script -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SKILL TREE MODAL -->
+    <div id="skilltree-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-indigo-500/40 w-full max-w-2xl rounded-2xl p-6 shadow-2xl relative text-slate-200">
+            <button onclick="toggleWindow('skilltree-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
+                <div>
+                    <h2 class="text-xl font-bold text-indigo-400 flex items-center gap-2">
+                        <i class="fa-solid fa-diagram-project"></i> Guardian Skill Matrix
+                    </h2>
+                    <p class="text-xs text-slate-400">Upgrade scientific abilities to combat Dilemma</p>
+                </div>
+                <div class="bg-indigo-950 border border-indigo-500/50 px-3 py-1 rounded-lg text-xs font-mono text-indigo-300">
+                    Available Skill Points: <span id="skill-points-display" class="font-bold text-white">0</span>
+                </div>
+            </div>
+
+            <!-- Skill Tree Nodes -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Skill Node 1 -->
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="font-bold text-cyan-400 text-sm">Enhanced Thermal Optics</span>
+                            <span class="text-xs bg-slate-800 px-2 py-0.5 rounded text-cyan-300 font-mono" id="skill-lvl-1">Lvl 1/3</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Increases Thermal Scanner duration and reduces serum mana cost.</p>
+                    </div>
+                    <button onclick="upgradeSkill(1)" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2 rounded-lg transition">
+                        Upgrade (1 Point)
+                    </button>
+                </div>
+
+                <!-- Skill Node 2 -->
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="font-bold text-red-400 text-sm">Plasma Blade Core</span>
+                            <span class="text-xs bg-slate-800 px-2 py-0.5 rounded text-red-300 font-mono" id="skill-lvl-2">Lvl 1/3</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Increases base attack damage against invisible entities.</p>
+                    </div>
+                    <button onclick="upgradeSkill(2)" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2 rounded-lg transition">
+                        Upgrade (1 Point)
+                    </button>
+                </div>
+
+                <!-- Skill Node 3 -->
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="font-bold text-emerald-400 text-sm">Medical Serum Efficiency</span>
+                            <span class="text-xs bg-slate-800 px-2 py-0.5 rounded text-emerald-300 font-mono" id="skill-lvl-3">Lvl 1/3</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Increases amount healed when using the Serum Injection skill.</p>
+                    </div>
+                    <button onclick="upgradeSkill(3)" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2 rounded-lg transition">
+                        Upgrade (1 Point)
+                    </button>
+                </div>
+
+                <!-- Skill Node 4 -->
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="font-bold text-amber-400 text-sm">Invisibility Resistance</span>
+                            <span class="text-xs bg-slate-800 px-2 py-0.5 rounded text-amber-300 font-mono" id="skill-lvl-4">Lvl 1/3</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Reduces incoming terror and ambush damage by 15% per rank.</p>
+                    </div>
+                    <button onclick="upgradeSkill(4)" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2 rounded-lg transition">
+                        Upgrade (1 Point)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NPC DIALOGUE BOX -->
+    <div id="dialogue-box" class="fixed bottom-20 left-1/2 -translate-x-1/2 w-11/12 max-w-xl bg-slate-900/95 border-2 border-cyan-500/80 p-5 rounded-2xl shadow-2xl z-40 hidden text-slate-100 backdrop-blur-md">
+        <div class="flex items-center gap-3 border-b border-slate-800 pb-2 mb-3">
+            <div id="npc-avatar" class="w-10 h-10 rounded-full bg-cyan-900 border border-cyan-400 flex items-center justify-center font-bold text-cyan-300 text-lg">
+                <i class="fa-solid fa-user-gear"></i>
+            </div>
+            <div>
+                <h3 id="npc-name" class="font-bold text-cyan-400 text-base">Dr. Aris (Senior Researcher)</h3>
+                <span id="npc-title" class="text-xs text-slate-400">Eastern Science Facility</span>
+            </div>
+        </div>
+        <p id="npc-text" class="text-sm leading-relaxed text-slate-200 min-h-[60px]">
+            Greetings Blakemort! Dilemma has injected the experimental invisible serum into his left arm and escaped into the lab grounds...
+        </p>
+        <div class="mt-4 flex justify-end gap-2">
+            <button id="npc-action-btn" class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-5 py-1.5 rounded-lg text-xs transition">
+                Accept Objective
+            </button>
+        </div>
+    </div>
+
+    <!-- ITEM TOOLTIP -->
+    <div id="item-tooltip" class="bg-slate-900 border border-cyan-500/80 px-3 py-2 rounded-lg shadow-xl text-xs z-50">
+        <div id="tooltip-title" class="font-bold text-cyan-400">Item Name</div>
+        <div id="tooltip-desc" class="text-slate-300">Item description goes here.</div>
+    </div>
+
+    <!-- GAME OVER / VICTORY OVERLAY -->
+    <div id="game-over-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-lg z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border-2 border-red-500/80 w-full max-w-lg rounded-2xl p-8 shadow-2xl text-center">
+            <div class="w-16 h-16 bg-red-950 rounded-full border border-red-500 flex items-center justify-center text-red-500 text-3xl mx-auto mb-4">
+                <i id="end-icon" class="fa-solid fa-skull"></i>
+            </div>
+            <h2 id="end-title" class="text-3xl font-black text-red-500 uppercase tracking-widest mb-2">MISSION FAILED</h2>
+            <p id="end-desc" class="text-sm text-slate-300 mb-6">You succumbed to the invisible terror. Dilemma's overexposure chaos continues.</p>
+            <button onclick="location.reload()" class="bg-red-600 hover:bg-red-500 text-white font-bold px-8 py-3 rounded-xl text-sm transition">
+                Try Again
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- WEB AUDIO API SOUND SYNTHESIZER ---
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new AudioCtx();
+        }
+
+        function playSound(type) {
+            try {
+                if (!audioCtx) return;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'laser') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(800, now);
+                    osc.frequency.exponentialRampToValueAtTime(100, now + 0.15);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                } else if (type === 'hit') {
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.linearRampToValueAtTime(40, now + 0.1);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                } else if (type === 'scan') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(400, now);
+                    osc.frequency.linearRampToValueAtTime(1200, now + 0.25);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'heal') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.linearRampToValueAtTime(600, now + 0.3);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                }
+            } catch (e) { console.log(e); }
+        }
+
+        // --- GAME STATE DATA ---
+        const gameState = {
+            player: {
+                level: 1,
+                hp: 100,
+                maxHp: 100,
+                mp: 50,
+                maxMp: 50,
+                exp: 0,
+                maxExp: 100,
+                atk: 15,
+                def: 10,
+                skillPoints: 1,
+                thermalVisionActive: false,
+                thermalTimer: 0,
+                position: new THREE.Vector3(0, 1, 0),
+                rotationY: 0,
+                isThirdPerson: true
+            },
+            skills: {
+                thermalLevel: 1,
+                attackLevel: 1,
+                healLevel: 1,
+                resistanceLevel: 1
+            },
+            questIndex: 0,
+            quests: [
+                { title: "1. Talk to Senior Researcher Dr. Aris", desc: "Locate Dr. Aris near the entrance of the eastern facility lab.", progress: 0, max: 1, completed: false },
+                { title: "2. Eliminate Invisible Serum Mutants", desc: "Use Thermal Scanner (Key '1') to reveal and eliminate 3 Invisible Mutants in the courtyard.", progress: 0, max: 3, completed: false },
+                { title: "3. Defeat Invisible Dilemma", desc: "Locate the renegade scientist Dilemma, reveal him with Thermal Vision, and defeat him before he terrorizes the world!", progress: 0, max: 1, completed: false }
+            ],
+            inventory: [
+                { id: 'item_1', name: 'Emergency Health Serum', type: 'consumable', icon: 'fa-bottle-droplet', desc: 'Restores 40 HP when consumed.' },
+                { id: 'item_2', name: 'Mana Battery', type: 'consumable', icon: 'fa-bolt', desc: 'Restores 30 Serum MP.' },
+                { id: 'item_3', name: 'Research Journal (March 8 2017)', type: 'lore', icon: 'fa-book', desc: 'Notes on Dilemma stabbing his left arm with invisibility serum.' }
+            ]
+        };
+
+        // --- THREE.JS SCENE SETUP ---
+        let scene, camera, renderer;
+        let playerMesh, cameraPivot;
+        let npcs = [];
+        let enemies = [];
+        let boss = null;
+        let keys = {};
+        let mouseLook = { x: 0, y: 0 };
+
+        function init3D() {
+            const container = document.getElementById('game-canvas');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050b14);
+            scene.fog = new THREE.FogExp2(0x050b14, 0.025);
+
+            // Camera & Pivot
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+            cameraPivot = new THREE.Object3D();
+            scene.add(cameraPivot);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ canvas: container, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0x1e293b, 1.2);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0x38bdf8, 1.5);
+            dirLight.position.set(20, 40, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            scene.add(dirLight);
+
+            // Cyber Lab Environment Construction
+            buildEnvironment();
+
+            // Player Mesh Creation (Blakemort)
+            createPlayer();
+
+            // Spawn Interactive NPCs
+            spawnNPCs();
+
+            // Spawn Initial Enemies
+            spawnEnemies();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; handleHotkeys(e); });
+            document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+            
+            // Mouse Click Attack / Lock Pointer on Canvas
+            container.addEventListener('click', () => {
+                initAudio();
+                if (document.pointerLockElement !== container) {
+                    container.requestPointerLock();
+                } else {
+                    playerAttack();
+                }
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (document.pointerLockElement === container) {
+                    playerMesh.rotation.y -= e.movementX * 0.003;
+                    gameState.player.rotationY = playerMesh.rotation.y;
+                }
+            });
+
+            // Camera toggle
+            document.getElementById('btn-camera-toggle').addEventListener('click', toggleCameraMode);
+
+            // Populate Inventory Initial UI
+            renderInventoryUI();
+        }
+
+        function buildEnvironment() {
+            // Metallic Sci-Fi Ground Grid
+            const gridGeo = new THREE.PlaneGeometry(120, 120);
+            const gridMat = new THREE.MeshStandardMaterial({ 
+                color: 0x0f172a, 
+                roughness: 0.4, 
+                metalness: 0.6 
+            });
+            const ground = new THREE.Mesh(gridGeo, gridMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Grid lines overlay
+            const gridHelper = new THREE.GridHelper(120, 40, 0x0ea5e9, 0x1e293b);
+            gridHelper.position.y = 0.01;
+            scene.add(gridHelper);
+
+            // Lab Perimeter Cyber Walls
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3 });
+            const createWall = (w, h, d, x, y, z) => {
+                const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+                wall.position.set(x, y, z);
+                wall.castShadow = true;
+                wall.receiveShadow = true;
+                scene.add(wall);
+            };
+
+            createWall(120, 6, 2, 0, 3, -60);
+            createWall(120, 6, 2, 0, 3, 60);
+            createWall(2, 6, 120, -60, 3, 0);
+            createWall(2, 6, 120, 60, 3, 0);
+
+            // Eastern Science Lab Central Hub Pillars
+            for (let i = -20; i <= 20; i += 20) {
+                for (let j = -20; j <= 20; j += 20) {
+                    if (i === 0 && j === 0) continue;
+                    const pillarGeo = new THREE.CylinderGeometry(1.5, 1.5, 10, 8);
+                    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8 });
+                    const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+                    pillar.position.set(i, 5, j);
+                    pillar.castShadow = true;
+                    scene.add(pillar);
+
+                    // Glowing neon ring on pillar
+                    const ringGeo = new THREE.TorusGeometry(1.6, 0.1, 8, 16);
+                    const ringMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });
+                    const ring = new THREE.Mesh(ringGeo, ringMat);
+                    ring.rotation.x = Math.PI / 2;
+                    ring.position.set(i, 4, j);
+                    scene.add(ring);
+                }
+            }
+        }
+
+        function createPlayer() {
+            const group = new THREE.Group();
+
+            // Body Armor
+            const bodyGeo = new THREE.CylinderGeometry(0.5, 0.4, 1.5, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.3 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.75;
+            body.castShadow = true;
+            group.add(body);
+
+            // Head / Helmet
+            const headGeo = new THREE.SphereGeometry(0.35, 16, 16);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.9 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 1.7;
+            group.add(head);
+
+            // Helmet Visor Glowing Cyan
+            const visorGeo = new THREE.BoxGeometry(0.35, 0.12, 0.25);
+            const visorMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });
+            const visor = new THREE.Mesh(visorGeo, visorMat);
+            visor.position.set(0, 1.72, 0.2);
+            group.add(visor);
+
+            // Plasma Weapon Blade
+            const bladeGeo = new THREE.BoxGeometry(0.08, 0.8, 0.08);
+            const bladeMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+            const blade = new THREE.Mesh(bladeGeo, bladeMat);
+            blade.position.set(0.5, 0.9, 0.3);
+            blade.rotation.x = Math.PI / 4;
+            group.add(blade);
+
+            playerMesh = group;
+            playerMesh.position.set(0, 0, 10);
+            scene.add(playerMesh);
+        }
+
+        function spawnNPCs() {
+            // Senior Researcher Dr. Aris NPC
+            const npcGroup = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.4, 8), new THREE.MeshStandardMaterial({ color: 0xe2e8f0 }));
+            body.position.y = 0.7;
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), new THREE.MeshStandardMaterial({ color: 0xfbbf24 }));
+            head.position.y = 1.5;
+            npcGroup.add(body, head);
+            npcGroup.position.set(0, 0, 2);
+
+            scene.add(npcGroup);
+            npcs.push({
+                name: "Dr. Aris (Senior Researcher)",
+                mesh: npcGroup,
+                position: npcGroup.position,
+                dialogue: "Greetings Blakemort! Dilemma has injected the experimental invisible serum into his left arm and fled. Use your Thermal Scanner (Key '1') to spot invisible enemies and neutralize them!"
+            });
+        }
+
+        function spawnEnemies() {
+            // Spawn 3 Invisible Mutants
+            const enemyPositions = [
+                new THREE.Vector3(-15, 0, -10),
+                new THREE.Vector3(15, 0, -15),
+                new THREE.Vector3(-10, 0, 15)
+            ];
+
+            enemyPositions.forEach((pos, idx) => {
+                const mesh = new THREE.Group();
+                const body = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.7, 12, 12),
+                    new THREE.MeshStandardMaterial({ color: 0xef4444, transparent: true, opacity: 0.15 })
+                );
+                body.position.y = 0.8;
+                mesh.add(body);
+                mesh.position.copy(pos);
+                scene.add(mesh);
+
+                enemies.push({
+                    id: 'enemy_' + idx,
+                    name: 'Invisible Serum Mutant',
+                    mesh: mesh,
+                    hp: 40,
+                    maxHp: 40,
+                    atk: 8,
+                    isInvisible: true
+                });
+            });
+        }
+
+        function spawnBossDilemma() {
+            const mesh = new THREE.Group();
+            // Boss Model
+            const body = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.8, 0.6, 2.2, 10),
+                new THREE.MeshStandardMaterial({ color: 0xd97706, transparent: true, opacity: 0.2 })
+            );
+            body.position.y = 1.1;
+
+            // Serum Arm (Left arm infected)
+            const arm = new THREE.Mesh(
+                new THREE.BoxGeometry(0.3, 1.0, 0.3),
+                new THREE.MeshBasicMaterial({ color: 0xd97706 })
+            );
+            arm.position.set(-0.7, 1.2, 0);
+            mesh.add(body, arm);
+
+            mesh.position.set(0, 0, -35);
+            scene.add(mesh);
+
+            boss = {
+                name: "Invisible Dilemma",
+                mesh: mesh,
+                hp: 300,
+                maxHp: 300,
+                atk: 18,
+                isInvisible: true
+            };
+
+            document.getElementById('boss-hud').classList.remove('hidden');
+            showToast("WARNING: Boss Invisible Dilemma has appeared!");
+        }
+
+        function gameLoop() {
+            requestAnimationFrame(gameLoop);
+
+            // Handle Movement
+            const moveSpeed = 0.15;
+            if (keys['w']) playerMesh.translateZ(-moveSpeed);
+            if (keys['s']) playerMesh.translateZ(moveSpeed);
+            if (keys['a']) playerMesh.translateX(-moveSpeed);
+            if (keys['d']) playerMesh.translateX(moveSpeed);
+
+            // Camera follow logic
+            if (gameState.player.isThirdPerson) {
+                const cameraOffset = new THREE.Vector3(0, 3, 6);
+                cameraOffset.applyQuaternion(playerMesh.quaternion);
+                camera.position.copy(playerMesh.position).add(cameraOffset);
+                camera.lookAt(playerMesh.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
+            } else {
+                // First-person view
+                camera.position.copy(playerMesh.position).add(new THREE.Vector3(0, 1.6, 0));
+                const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(playerMesh.quaternion);
+                camera.lookAt(camera.position.clone().add(dir));
+            }
+
+            // Thermal Scanner Timer logic
+            if (gameState.player.thermalVisionActive) {
+                gameState.player.thermalTimer -= 0.016;
+                if (gameState.player.thermalTimer <= 0) {
+                    gameState.player.thermalVisionActive = false;
+                    document.getElementById('thermal-overlay').style.display = 'none';
+                    document.getElementById('thermal-status').innerHTML = `
+                        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                        <span>THERMAL VISION: OFF (Press '1' or Click Skill)</span>`;
+                    updateEnemyVisibilities();
+                }
+            }
+
+            // Check Proximity with NPCs for interaction
+            npcs.forEach(npc => {
+                const dist = playerMesh.position.distanceTo(npc.position);
+                if (dist < 3.0 && gameState.questIndex === 0) {
+                    showDialogue(npc.name, npc.dialogue, () => {
+                        advanceQuest();
+                    });
+                }
+            });
+
+            // Update Minimap Radar
+            renderMinimap();
+
+            renderer.render(scene, camera);
+        }
+
+        function toggleCameraMode() {
+            gameState.player.isThirdPerson = !gameState.player.isThirdPerson;
+            const txt = gameState.player.isThirdPerson ? '3rd Person' : '1st Person';
+            document.getElementById('camera-mode-text').innerText = txt;
+        }
+
+        function updateEnemyVisibilities() {
+            const isScannerOn = gameState.player.thermalVisionActive;
+            enemies.forEach(e => {
+                e.mesh.children[0].material.opacity = isScannerOn ? 0.85 : 0.15;
+            });
+            if (boss) {
+                boss.mesh.children[0].material.opacity = isScannerOn ? 0.9 : 0.2;
+            }
+        }
+
+        function useSkill(slot) {
+            initAudio();
+            if (slot === 1) { // Thermal Scanner
+                if (gameState.player.mp >= 10) {
+                    gameState.player.mp -= 10;
+                    gameState.player.thermalVisionActive = true;
+                    gameState.player.thermalTimer = 8 + (gameState.skills.thermalLevel * 2);
+                    document.getElementById('thermal-overlay').style.display = 'block';
+                    document.getElementById('thermal-status').innerHTML = `
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                        <span class="text-emerald-400 font-bold">THERMAL VISION ACTIVE</span>`;
+                    playSound('scan');
+                    updateEnemyVisibilities();
+                    updateHUD();
+                } else {
+                    showToast("Not enough Serum MP!");
+                }
+            } else if (slot === 2) { // Attack
+                playerAttack();
+            } else if (slot === 3) { // Barrier
+                if (gameState.player.mp >= 20) {
+                    gameState.player.mp -= 20;
+                    showToast("Anti-Serum Shield Activated!");
+                    playSound('heal');
+                    updateHUD();
+                }
+            } else if (slot === 4) { // Heal
+                if (gameState.player.mp >= 15) {
+                    gameState.player.mp -= 15;
+                    const healAmt = 30 + (gameState.skills.healLevel * 10);
+                    gameState.player.hp = Math.min(gameState.player.maxHp, gameState.player.hp + healAmt);
+                    showToast(`Injected Heal Serum (+${healAmt} HP)`);
+                    playSound('heal');
+                    updateHUD();
+                }
+            }
+        }
+
+        function playerAttack() {
+            playSound('laser');
+
+            // Hit Detection Range
+            const attackRange = 3.5;
+
+            // Check Minion Enemies
+            enemies.forEach((enemy, idx) => {
+                const dist = playerMesh.position.distanceTo(enemy.mesh.position);
+                if (dist <= attackRange) {
+                    const dmg = gameState.player.atk + (gameState.skills.attackLevel * 5);
+                    enemy.hp -= dmg;
+                    playSound('hit');
+                    showToast(`Dealt ${dmg} damage to ${enemy.name}!`);
+
+                    if (enemy.hp <= 0) {
+                        scene.remove(enemy.mesh);
+                        enemies.splice(idx, 1);
+                        gainExp(40);
+
+                        if (gameState.questIndex === 1) {
+                            const quest = gameState.quests[1];
+                            quest.progress++;
+                            document.getElementById('hud-quest-progress').innerText = `${quest.progress} / ${quest.max}`;
+                            if (quest.progress >= quest.max) {
+                                advanceQuest();
+                                spawnBossDilemma();
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Check Boss Dilemma
+            if (boss) {
+                const dist = playerMesh.position.distanceTo(boss.mesh.position);
+                if (dist <= attackRange + 1.0) {
+                    const dmg = gameState.player.atk + (gameState.skills.attackLevel * 5);
+                    boss.hp -= dmg;
+                    playSound('hit');
+
+                    const pct = Math.max(0, (boss.hp / boss.maxHp) * 100);
+                    document.getElementById('boss-hp-bar').style.width = pct + '%';
+                    document.getElementById('boss-hp-text').innerText = `${boss.hp}/${boss.maxHp}`;
+
+                    if (boss.hp <= 0) {
+                        scene.remove(boss.mesh);
+                        boss = null;
+                        document.getElementById('boss-hud').classList.add('hidden');
+                        gainExp(200);
+                        advanceQuest();
+                        showVictoryModal();
+                    }
+                }
+            }
+        }
+
+        function gainExp(amount) {
+            gameState.player.exp += amount;
+            if (gameState.player.exp >= gameState.player.maxExp) {
+                gameState.player.level++;
+                gameState.player.exp -= gameState.player.maxExp;
+                gameState.player.maxExp = Math.floor(gameState.player.maxExp * 1.5);
+                gameState.player.skillPoints++;
+                gameState.player.maxHp += 20;
+                gameState.player.hp = gameState.player.maxHp;
+                showToast(`LEVEL UP! You are now Level ${gameState.player.level}! +1 Skill Point`);
+            }
+            updateHUD();
+        }
+
+        function updateHUD() {
+            document.getElementById('hud-player-level').innerText = `LVL ${gameState.player.level}`;
+            document.getElementById('hud-hp-text').innerText = `${gameState.player.hp} / ${gameState.player.maxHp}`;
+            document.getElementById('hud-hp-bar').style.width = `${(gameState.player.hp / gameState.player.maxHp) * 100}%`;
+
+            document.getElementById('hud-mp-text').innerText = `${gameState.player.mp} / ${gameState.player.maxMp}`;
+            document.getElementById('hud-mp-bar').style.width = `${(gameState.player.mp / gameState.player.maxMp) * 100}%`;
+
+            document.getElementById('hud-exp-text').innerText = `${gameState.player.exp} / ${gameState.player.maxExp}`;
+            document.getElementById('hud-exp-bar').style.width = `${(gameState.player.exp / gameState.player.maxExp) * 100}%`;
+
+            document.getElementById('skill-points-display').innerText = gameState.player.skillPoints;
+        }
+
+        function advanceQuest() {
+            if (gameState.questIndex < gameState.quests.length - 1) {
+                gameState.questIndex++;
+                const q = gameState.quests[gameState.questIndex];
+                document.getElementById('hud-quest-title').innerText = q.title;
+                document.getElementById('hud-quest-desc').innerText = q.desc;
+                document.getElementById('hud-quest-progress').innerText = `${q.progress} / ${q.max}`;
+                showToast(`New Quest Objective: ${q.title}`);
+            }
+        }
+
+        function renderMinimap() {
+            const canvas = document.getElementById('minimap-canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const scale = 2; // Map scale factor
+            const center = 80;
+
+            // Draw Radar Sweeping Grid
+            ctx.strokeStyle = '#0284c7';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.arc(center, center, 70, 0, Math.PI * 2);
+            ctx.arc(center, center, 40, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Draw Enemies on Radar
+            enemies.forEach(e => {
+                const relX = (e.mesh.position.x - playerMesh.position.x) * scale;
+                const relZ = (e.mesh.position.z - playerMesh.position.z) * scale;
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(center + relX, center + relZ, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw Boss on Radar
+            if (boss) {
+                const relX = (boss.mesh.position.x - playerMesh.position.x) * scale;
+                const relZ = (boss.mesh.position.z - playerMesh.position.z) * scale;
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath();
+                ctx.arc(center + relX, center + relZ, 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function upgradeSkill(id) {
+            if (gameState.player.skillPoints > 0) {
+                gameState.player.skillPoints--;
+                if (id === 1) gameState.skills.thermalLevel++;
+                if (id === 2) gameState.skills.attackLevel++;
+                if (id === 3) gameState.skills.healLevel++;
+                if (id === 4) gameState.skills.resistanceLevel++;
+
+                document.getElementById(`skill-lvl-${id}`).innerText = `Lvl ${gameState.skills[Object.keys(gameState.skills)[id - 1]]}/3`;
+                updateHUD();
+                showToast("Skill Upgraded Successfully!");
+            } else {
+                showToast("No Skill Points available!");
+            }
+        }
+
+        function renderInventoryUI() {
+            const grid = document.getElementById('inventory-grid');
+            grid.innerHTML = '';
+            gameState.inventory.forEach(item => {
+                const el = document.createElement('div');
+                el.className = 'bg-slate-900 border border-slate-700 p-3 rounded-lg flex flex-col items-center justify-center text-center hover:border-cyan-400 transition cursor-pointer';
+                el.innerHTML = `
+                    <i class="fa-solid ${item.icon} text-cyan-400 text-xl mb-1"></i>
+                    <span class="text-[11px] font-bold text-slate-200 line-clamp-1">${item.name}</span>
+                `;
+                grid.appendChild(el);
+            });
+        }
+
+        function showDialogue(name, text, onAccept) {
+            const box = document.getElementById('dialogue-box');
+            document.getElementById('npc-name').innerText = name;
+            document.getElementById('npc-text').innerText = text;
+            box.classList.remove('hidden');
+
+            const btn = document.getElementById('npc-action-btn');
+            btn.onclick = () => {
+                box.classList.add('hidden');
+                if (onAccept) onAccept();
+            };
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('notification-toast');
+            document.getElementById('toast-message').innerText = msg;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3500);
+        }
+
+        function showVictoryModal() {
+            const modal = document.getElementById('game-over-modal');
+            document.getElementById('end-icon').className = 'fa-solid fa-trophy text-amber-400';
+            document.getElementById('end-title').className = 'text-3xl font-black text-amber-400 uppercase tracking-widest mb-2';
+            document.getElementById('end-title').innerText = 'MISSION ACCOMPLISHED';
+            document.getElementById('end-desc').innerText = "Blakemort successfully stopped Invisible Dilemma, putting an end to the destruction and saving the people from terror!";
+            modal.classList.remove('hidden');
+        }
+
+        function toggleWindow(id) {
+            const win = document.getElementById(id);
+            win.classList.toggle('hidden');
+        }
+
+        function handleHotkeys(e) {
+            if (e.key === '1') useSkill(1);
+            if (e.key === '2') useSkill(2);
+            if (e.key === '3') useSkill(3);
+            if (e.key === '4') useSkill(4);
+            if (e.key.toLowerCase() === 'i') toggleWindow('inventory-modal');
+            if (e.key.toLowerCase() === 'k') toggleWindow('skilltree-modal');
+            if (e.key.toLowerCase() === 'v') toggleCameraMode();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- INIT GAME ON LOAD ---
+        window.onload = function() {
+            init3D();
+            updateHUD();
+            gameLoop();
+        };
+    </script>
+</body>
+</html>
